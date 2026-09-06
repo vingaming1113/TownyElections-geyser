@@ -2,22 +2,27 @@ name: Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "**" ]
   pull_request:
-    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
       
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
+        distribution: temurin
         java-version: '21'
-        distribution: 'temurin'
+        cache: gradle
     
     - name: Build with Gradle
       uses: gradle/gradle-build-action@v3
@@ -25,22 +30,22 @@ jobs:
         gradle-version: 8.10.2
         arguments: build shadowJar
         
-    - name: Upload build artifact
+    - name: Upload jar artifact
       uses: actions/upload-artifact@v4
       with:
         name: TownyElections-geyser
-        path: build/libs/*.jar
-        retention-days: 7
+        path: build/libs/TownyElections-geyser-*.jar
+        if-no-files-found: error
     
-    - name: Create nightly release
-      uses: softprops/action-gh-release@v2
-      if: github.ref == 'refs/heads/main' && success()
-      with:
-        name: Nightly Build - ${{ github.sha }}
-        tag_name: nightly-${{ github.sha }}
-        files: build/libs/*.jar
-        prerelease: true
-        generate_release_notes: false
-        fail_on_unmatched_files: false
+    - name: Publish rolling nightly release
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release delete nightly --yes --cleanup-tag || true
+        gh release create nightly \
+          --title "Nightly" \
+          --notes "Automated nightly build from commit ${{ github.sha }} (updated on every push to main)." \
+          --prerelease \
+          --target main \
+          build/libs/TownyElections-geyser-*.jar
