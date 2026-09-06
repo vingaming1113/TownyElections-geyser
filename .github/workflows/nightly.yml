@@ -22,6 +22,7 @@ jobs:
     - name: Build with Gradle
       uses: gradle/gradle-build-action@v3
       with:
+        gradle-version: 8.10.2
         arguments: build shadowJar
         
     - name: Create nightly artifact name
