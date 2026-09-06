@@ -1,24 +1,34 @@
 package com.townyelections.geyser;
 
-import org.geysermc.api.GeyserAPI;
-import org.geysermc.api.connection.player.GeyserPlayer;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
-
 import java.util.*;
 import java.lang.reflect.Method;
+import java.lang.reflect.Field;
 import java.util.logging.Level;
 
 /**
  * Bridge class that connects TownyElections functionality to GeyserMC using reflection.
- * This avoids compile-time dependencies on TownyElections and Towny.
+ * This avoids ALL compile-time dependencies - everything is loaded via reflection.
  */
 public class TownyElectionsBridge {
 
     private final TownyElectionsExtension extension;
-    private final GeyserAPI geyserAPI;
+    private Object geyserAPI;
     
-    // Reflection cached references
+    // Reflection cached references for Geyser API
+    private Class<?> geyserAPIClass;
+    private Class<?> geyserPlayerClass;
+    private Class<?> eventBusClass;
+    private Class<?> playerJoinEventClass;
+    private Class<?> playerQuitEventClass;
+    private Class<?> subscribeAnnotationClass;
+    private Class<?> customFormClass;
+    private Class<?> simpleFormClass;
+    private Class<?> formResponseClass;
+    private Class<?> formBuilderClass;
+    private Class<?> customFormBuilderClass;
+    private Class<?> simpleFormBuilderClass;
+    
+    // Reflection cached references for TownyElections
     private Class<?> townyElectionsClass;
     private Class<?> electionManagerClass;
     private Class<?> electionClass;
@@ -30,12 +40,20 @@ public class TownyElectionsBridge {
     private Class<?> constituencyClass;
     private Class<?> operationResultClass;
     
+    // Reflection cached references for Bukkit
+    private Class<?> bukkitClass;
+    private Class<?> pluginClass;
+    private Class<?> playerClass;
+    private Class<?> pluginManagerClass;
+    private Class<?> schedulerClass;
+    
     private Object townyElections;
     private Object electionManager;
     private Object townyHook;
+    private Object bukkit;
     private boolean initialized = false;
 
-    public TownyElectionsBridge(TownyElectionsExtension extension, GeyserAPI geyserAPI) {
+    public TownyElectionsBridge(TownyElectionsExtension extension, Object geyserAPI) {
         this.extension = extension;
         this.geyserAPI = geyserAPI;
     }
@@ -47,16 +65,28 @@ public class TownyElectionsBridge {
         }
 
         try {
-            // Get TownyElections plugin
-            org.bukkit.plugin.Plugin plugin = extension.getTownyElectionsPlugin();
-            if (plugin == null) {
-                extension.logger().severe("TownyElections plugin not found");
-                return;
-            }
-            townyElections = plugin;
-            townyElectionsClass = plugin.getClass();
-
-            // Load classes by name
+            // Load Geyser API classes
+            geyserAPIClass = Class.forName("org.geysermc.api.GeyserAPI");
+            geyserPlayerClass = Class.forName("org.geysermc.api.connection.player.GeyserPlayer");
+            eventBusClass = Class.forName("org.geysermc.api.event.bus.EventBus");
+            playerJoinEventClass = Class.forName("org.geysermc.api.event.player.PlayerJoinEvent");
+            playerQuitEventClass = Class.forName("org.geysermc.api.event.player.PlayerQuitEvent");
+            subscribeAnnotationClass = Class.forName("org.geysermc.api.event.Subscribe");
+            customFormClass = Class.forName("org.geysermc.api.form.CustomForm");
+            simpleFormClass = Class.forName("org.geysermc.api.form.SimpleForm");
+            formResponseClass = Class.forName("org.geysermc.api.form.FormResponse");
+            customFormBuilderClass = Class.forName("org.geysermc.api.form.CustomForm$Builder");
+            simpleFormBuilderClass = Class.forName("org.geysermc.api.form.SimpleForm$Builder");
+            
+            // Load Bukkit classes
+            bukkitClass = Class.forName("org.bukkit.Bukkit");
+            pluginClass = Class.forName("org.bukkit.plugin.Plugin");
+            playerClass = Class.forName("org.bukkit.entity.Player");
+            pluginManagerClass = Class.forName("org.bukkit.plugin.PluginManager");
+            schedulerClass = Class.forName("org.bukkit.scheduler.BukkitScheduler");
+            
+            // Load TownyElections classes
+            townyElectionsClass = Class.forName("com.townyelections.TownyElections");
             electionManagerClass = Class.forName("com.townyelections.manager.ElectionManager");
             electionClass = Class.forName("com.townyelections.model.Election");
             candidateClass = Class.forName("com.townyelections.model.Candidate");
@@ -68,6 +98,18 @@ public class TownyElectionsBridge {
             townClass = Class.forName("com.palmergames.bukkit.towny.object.Town");
             residentClass = Class.forName("com.palmergames.bukkit.towny.object.Resident");
 
+            // Get TownyElections plugin via Bukkit
+            Method getPluginManager = bukkitClass.getMethod("getPluginManager");
+            Object pluginManager = getPluginManager.invoke(null);
+            Method getPlugin = pluginManagerClass.getMethod("getPlugin", String.class);
+            Object plugin = getPlugin.invoke(pluginManager, "TownyElections");
+            
+            if (plugin == null) {
+                extension.log(Level.SEVERE, "TownyElections plugin not found");
+                return;
+            }
+            townyElections = plugin;
+
             // Get electionManager from TownyElections
             Method getElectionManager = townyElectionsClass.getMethod("getElectionManager");
             electionManager = getElectionManager.invoke(townyElections);
@@ -76,41 +118,42 @@ public class TownyElectionsBridge {
             Method getTownyHook = townyElectionsClass.getMethod("getTownyHook");
             townyHook = getTownyHook.invoke(townyElections);
 
+            // Cache Bukkit instance
+            bukkit = null; // Bukkit is static, accessed via class methods
+
             initialized = true;
-            extension.logger().info("TownyElections bridge initialized successfully using reflection");
+            extension.log(Level.INFO, "TownyElections bridge initialized successfully using reflection");
 
         } catch (Exception e) {
-            extension.logger().log(Level.SEVERE, "Error initializing TownyElections bridge: " + e.getMessage(), e);
+            extension.log(Level.SEVERE, "Error initializing TownyElections bridge: " + e.getMessage(), e);
         }
     }
 
     public void shutdown() {
         initialized = false;
-        extension.logger().info("TownyElections bridge shutdown complete");
+        extension.log(Level.INFO, "TownyElections bridge shutdown complete");
     }
 
-    /**
-     * Check if a player is a Bedrock player (connected via Geyser)
-     */
     public boolean isBedrockPlayer(UUID playerId) {
-        return geyserAPI.isBedrockPlayer(playerId);
+        try {
+            Method isBedrockPlayer = geyserAPIClass.getMethod("isBedrockPlayer", UUID.class);
+            return (Boolean) isBedrockPlayer.invoke(geyserAPI, playerId);
+        } catch (Exception e) {
+            extension.log(Level.WARNING, "Error checking if player is Bedrock: " + e.getMessage(), e);
+            return false;
+        }
     }
 
-    /**
-     * Get the GeyserPlayer for a player
-     */
-    public GeyserPlayer getGeyserPlayer(UUID playerId) {
+    public Object getGeyserPlayer(UUID playerId) {
         try {
-            return (GeyserPlayer) geyserAPI.getConnection(playerId);
+            Method getConnection = geyserAPIClass.getMethod("getConnection", UUID.class);
+            return getConnection.invoke(geyserAPI, playerId);
         } catch (Exception e) {
-            extension.logger().warning("Error getting GeyserPlayer: " + e.getMessage());
+            extension.log(Level.WARNING, "Error getting GeyserPlayer: " + e.getMessage(), e);
             return null;
         }
     }
 
-    /**
-     * Get election for a specific town
-     */
     public Object getElectionForTown(UUID townUuid) {
         if (electionManager == null || electionManagerClass == null) {
             return null;
@@ -119,21 +162,17 @@ public class TownyElectionsBridge {
             Method getElection = electionManagerClass.getMethod("getElection", UUID.class);
             return getElection.invoke(electionManager, townUuid);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error getting election for town: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error getting election for town: " + e.getMessage(), e);
             return null;
         }
     }
 
-    /**
-     * Get election for a player's town
-     */
     public Object getElectionForPlayer(UUID playerId) {
         if (electionManager == null || townyHook == null) {
             return null;
         }
 
         try {
-            // Get resident
             Method getResident = townyHookClass.getMethod("getResident", UUID.class);
             Object resident = getResident.invoke(townyHook, playerId);
             
@@ -141,13 +180,11 @@ public class TownyElectionsBridge {
                 return null;
             }
 
-            // Check if resident has town
             Method hasTown = residentClass.getMethod("hasTown");
             if (!(Boolean) hasTown.invoke(resident)) {
                 return null;
             }
 
-            // Get town
             Method getTownOrNull = residentClass.getMethod("getTownOrNull");
             Object town = getTownOrNull.invoke(resident);
             
@@ -155,22 +192,17 @@ public class TownyElectionsBridge {
                 return null;
             }
 
-            // Get town UUID
             Method getUUID = townClass.getMethod("getUUID");
             UUID townUuid = (UUID) getUUID.invoke(town);
 
-            // Get election
             Method getElection = electionManagerClass.getMethod("getElection", UUID.class);
             return getElection.invoke(electionManager, townUuid);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error getting election for player: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error getting election for player: " + e.getMessage(), e);
             return null;
         }
     }
 
-    /**
-     * Get all active elections
-     */
     public Collection<?> getActiveElections() {
         if (electionManager == null || electionManagerClass == null) {
             return Collections.emptyList();
@@ -181,14 +213,11 @@ public class TownyElectionsBridge {
             Method values = activeMap.getClass().getMethod("values");
             return (Collection<?>) values.invoke(activeMap);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error getting active elections: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error getting active elections: " + e.getMessage(), e);
             return Collections.emptyList();
         }
     }
 
-    /**
-     * Check if a player can vote in their town's election
-     */
     public boolean canVote(UUID playerId) {
         Object election = getElectionForPlayer(playerId);
         if (election == null) {
@@ -199,20 +228,16 @@ public class TownyElectionsBridge {
             Method getPhase = electionClass.getMethod("getPhase");
             Object phase = getPhase.invoke(election);
             
-            // Check if phase is VOTING or RUNOFF
             Method nameMethod = electionPhaseClass.getMethod("name");
             String phaseName = (String) nameMethod.invoke(phase);
             
             return "VOTING".equals(phaseName) || "RUNOFF".equals(phaseName);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error checking if player can vote: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error checking if player can vote: " + e.getMessage(), e);
             return false;
         }
     }
 
-    /**
-     * Check if a player has already voted
-     */
     public boolean hasVoted(UUID playerId) {
         Object election = getElectionForPlayer(playerId);
         if (election == null) {
@@ -222,14 +247,11 @@ public class TownyElectionsBridge {
             Method hasVoted = electionClass.getMethod("hasVoted", UUID.class);
             return (Boolean) hasVoted.invoke(election, playerId);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error checking if player has voted: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error checking if player has voted: " + e.getMessage(), e);
             return false;
         }
     }
 
-    /**
-     * Get all candidates for a player's town election
-     */
     public List<Object> getCandidates(UUID playerId) {
         Object election = getElectionForPlayer(playerId);
         if (election == null) {
@@ -240,14 +262,11 @@ public class TownyElectionsBridge {
             Object candidateList = getCandidateList.invoke(election);
             return new ArrayList<>((Collection<?>) candidateList);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error getting candidates: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error getting candidates: " + e.getMessage(), e);
             return Collections.emptyList();
         }
     }
 
-    /**
-     * Get all candidates for a specific town
-     */
     public List<Object> getCandidatesForTown(UUID townUuid) {
         Object election = getElectionForTown(townUuid);
         if (election == null) {
@@ -258,39 +277,34 @@ public class TownyElectionsBridge {
             Object candidateList = getCandidateList.invoke(election);
             return new ArrayList<>((Collection<?>) candidateList);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error getting candidates for town: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error getting candidates for town: " + e.getMessage(), e);
             return Collections.emptyList();
         }
     }
 
-    /**
-     * Cast a vote for a Bedrock player
-     */
     public boolean castVote(UUID playerId, UUID candidateId) {
         if (electionManager == null || townyHook == null) {
             return false;
         }
 
         try {
-            // Get resident
             Method getResident = townyHookClass.getMethod("getResident", UUID.class);
             Object resident = getResident.invoke(townyHook, playerId);
             
-            Player bukkitPlayer = Bukkit.getPlayer(playerId);
+            Method getPlayer = bukkitClass.getMethod("getPlayer", UUID.class);
+            Object bukkitPlayer = getPlayer.invoke(null, playerId);
             
             if (resident == null || bukkitPlayer == null) {
                 return false;
             }
 
-            // Get town
-            Method getPlayerTown = townyHookClass.getMethod("getPlayerTown", Player.class);
+            Method getPlayerTown = townyHookClass.getMethod("getPlayerTown", playerClass);
             Object town = getPlayerTown.invoke(townyHook, bukkitPlayer);
             
             if (town == null) {
                 return false;
             }
 
-            // Create constituency
             Method ofMethod = townyHookClass.getMethod("of", townClass);
             Object constituency = ofMethod.invoke(townyHook, town);
             
@@ -298,9 +312,8 @@ public class TownyElectionsBridge {
                 return false;
             }
 
-            // Cast vote
             Method castVote = electionManagerClass.getMethod("castVote", 
-                residentClass, townClass, UUID.class, Player.class);
+                residentClass, townClass, UUID.class, playerClass);
             Object result = castVote.invoke(electionManager, resident, town, candidateId, bukkitPlayer);
             
             if (result == null) {
@@ -310,14 +323,11 @@ public class TownyElectionsBridge {
             Method success = operationResultClass.getMethod("success");
             return (Boolean) success.invoke(result);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error casting vote for Bedrock player: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error casting vote for Bedrock player: " + e.getMessage(), e);
             return false;
         }
     }
 
-    /**
-     * Get election phase for a player's town
-     */
     public Object getElectionPhase(UUID playerId) {
         Object election = getElectionForPlayer(playerId);
         if (election == null) {
@@ -327,14 +337,11 @@ public class TownyElectionsBridge {
             Method getPhase = electionClass.getMethod("getPhase");
             return getPhase.invoke(election);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error getting election phase: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error getting election phase: " + e.getMessage(), e);
             return null;
         }
     }
 
-    /**
-     * Get time remaining for current election phase
-     */
     public long getTimeRemaining(UUID playerId) {
         Object election = getElectionForPlayer(playerId);
         if (election == null) {
@@ -344,14 +351,11 @@ public class TownyElectionsBridge {
             Method getMillisRemaining = electionClass.getMethod("getMillisRemaining");
             return (Long) getMillisRemaining.invoke(election);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error getting time remaining: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error getting time remaining: " + e.getMessage(), e);
             return 0;
         }
     }
 
-    /**
-     * Get town name for a player
-     */
     public String getTownName(UUID playerId) {
         if (townyHook == null || townyHookClass == null) {
             return "Unknown";
@@ -380,14 +384,11 @@ public class TownyElectionsBridge {
             Method getName = townClass.getMethod("getName");
             return (String) getName.invoke(town);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error getting town name: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error getting town name: " + e.getMessage(), e);
             return "Unknown";
         }
     }
 
-    /**
-     * Get candidate by UUID from any active election
-     */
     public Object getCandidate(UUID candidateId) {
         if (electionManager == null || electionManagerClass == null) {
             return null;
@@ -409,14 +410,11 @@ public class TownyElectionsBridge {
             }
             return null;
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error getting candidate: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error getting candidate: " + e.getMessage(), e);
             return null;
         }
     }
 
-    /**
-     * Get total votes cast in election
-     */
     public int getTotalVotes(UUID playerId) {
         Object election = getElectionForPlayer(playerId);
         if (election == null) {
@@ -426,14 +424,11 @@ public class TownyElectionsBridge {
             Method getTotalVotes = electionClass.getMethod("getTotalVotes");
             return (Integer) getTotalVotes.invoke(election);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error getting total votes: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error getting total votes: " + e.getMessage(), e);
             return 0;
         }
     }
 
-    /**
-     * Get the vote tally for an election
-     */
     public Map<UUID, Integer> getVoteTally(UUID playerId) {
         Object election = getElectionForPlayer(playerId);
         if (election == null) {
@@ -443,14 +438,11 @@ public class TownyElectionsBridge {
             Method tally = electionClass.getMethod("tally");
             return (Map<UUID, Integer>) tally.invoke(election);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error getting vote tally: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error getting vote tally: " + e.getMessage(), e);
             return Collections.emptyMap();
         }
     }
 
-    /**
-     * Get the ballot for a specific player
-     */
     public List<UUID> getBallot(UUID playerId) {
         Object election = getElectionForPlayer(playerId);
         if (election == null) {
@@ -460,7 +452,7 @@ public class TownyElectionsBridge {
             Method getBallot = electionClass.getMethod("getBallot", UUID.class);
             return (List<UUID>) getBallot.invoke(election, playerId);
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error getting ballot: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error getting ballot: " + e.getMessage(), e);
             return Collections.emptyList();
         }
     }
@@ -505,6 +497,119 @@ public class TownyElectionsBridge {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    // Helper methods for sending forms
+    public void sendForm(Object geyserPlayer, Object form) {
+        if (geyserPlayer == null) {
+            return;
+        }
+        try {
+            Method sendForm = geyserPlayerClass.getMethod("sendForm", Object.class);
+            sendForm.invoke(geyserPlayer, form);
+        } catch (Exception e) {
+            extension.log(Level.WARNING, "Error sending form: " + e.getMessage(), e);
+        }
+    }
+
+    public Object createCustomForm() {
+        try {
+            Method builder = customFormClass.getMethod("builder");
+            return builder.invoke(null);
+        } catch (Exception e) {
+            extension.log(Level.WARNING, "Error creating CustomForm builder: " + e.getMessage(), e);
+            return null;
+        }
+    }
+
+    public Object createSimpleForm() {
+        try {
+            Method builder = simpleFormClass.getMethod("builder");
+            return builder.invoke(null);
+        } catch (Exception e) {
+            extension.log(Level.WARNING, "Error creating SimpleForm builder: " + e.getMessage(), e);
+            return null;
+        }
+    }
+
+    public void setFormTitle(Object formBuilder, String title) {
+        try {
+            Method titleMethod = formBuilder.getClass().getMethod("title", String.class);
+            titleMethod.invoke(formBuilder, title);
+        } catch (Exception e) {
+            extension.log(Level.WARNING, "Error setting form title: " + e.getMessage(), e);
+        }
+    }
+
+    public void addFormText(Object formBuilder, String text) {
+        try {
+            Method textMethod = formBuilder.getClass().getMethod("text", String.class);
+            textMethod.invoke(formBuilder, text);
+        } catch (Exception e) {
+            extension.log(Level.WARNING, "Error adding form text: " + e.getMessage(), e);
+        }
+    }
+
+    public void addFormButton(Object formBuilder, String text, String value) {
+        try {
+            Method buttonMethod = formBuilder.getClass().getMethod("button", String.class, String.class);
+            buttonMethod.invoke(formBuilder, text, value);
+        } catch (Exception e) {
+            extension.log(Level.WARNING, "Error adding form button: " + e.getMessage(), e);
+        }
+    }
+
+    public Object buildForm(Object formBuilder) {
+        try {
+            Method buildMethod = formBuilder.getClass().getMethod("build");
+            return buildMethod.invoke(formBuilder);
+        } catch (Exception e) {
+            extension.log(Level.WARNING, "Error building form: " + e.getMessage(), e);
+            return null;
+        }
+    }
+
+    public void setFormResponder(Object formBuilder, Object handler) {
+        try {
+            Method respondWith = formBuilder.getClass().getMethod("respondWith", Class.forName("org.geysermc.api.form.util.FormHandler"));
+            respondWith.invoke(formBuilder, handler);
+        } catch (Exception e) {
+            // Form responder is optional
+        }
+    }
+
+    public Object getEventBus() {
+        try {
+            Method eventBus = geyserAPIClass.getMethod("eventBus");
+            return eventBus.invoke(geyserAPI);
+        } catch (Exception e) {
+            extension.log(Level.WARNING, "Error getting event bus: " + e.getMessage(), e);
+            return null;
+        }
+    }
+
+    public void registerEventListener(Object eventBus, Object listener) {
+        try {
+            Method subscribe = eventBusClass.getMethod("subscribe", Object.class);
+            subscribe.invoke(eventBus, listener);
+        } catch (Exception e) {
+            extension.log(Level.WARNING, "Error subscribing to events: " + e.getMessage(), e);
+        }
+    }
+
+    public void runTaskLater(Object plugin, Runnable task, long delay) {
+        try {
+            Method getScheduler = bukkitClass.getMethod("getScheduler");
+            Object scheduler = getScheduler.invoke(null);
+            Method runTaskLater = schedulerClass.getMethod("runTaskLater", pluginClass, Runnable.class, long.class);
+            runTaskLater.invoke(scheduler, plugin, task, delay);
+        } catch (Exception e) {
+            extension.log(Level.WARNING, "Error scheduling task: " + e.getMessage(), e);
+        }
+    }
+
+    public Object getTownyElectionsPlugin() {
+        return townyElections;
     }
 
     public boolean isInitialized() {

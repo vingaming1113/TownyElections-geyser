@@ -12,8 +12,11 @@ repositories {
 }
 
 dependencies {
-    // Geyser API - provided by Geyser at runtime, but needed for compilation
+    // Geyser API - needed for compilation
     compileOnly 'org.geysermc.geyser:api:2.10.0-SNAPSHOT'
+    
+    // Bukkit API - needed for compilation
+    compileOnly 'org.bukkit:bukkit:1.21.4-R0.1-SNAPSHOT'
 }
 
 shadowJar {

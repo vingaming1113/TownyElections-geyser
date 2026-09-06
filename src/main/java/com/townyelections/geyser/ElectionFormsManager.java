@@ -1,23 +1,14 @@
 package com.townyelections.geyser;
 
-import org.geysermc.api.GeyserAPI;
-import org.geysermc.api.connection.player.GeyserPlayer;
-import org.geysermc.api.event.Subscribe;
-import org.geysermc.api.event.bus.EventBus;
-import org.geysermc.api.event.player.PlayerJoinEvent;
-import org.geysermc.api.event.player.PlayerQuitEvent;
-import org.geysermc.api.form.CustomForm;
-import org.geysermc.api.form.SimpleForm;
-import org.geysermc.api.form.FormResponse;
-
-import org.bukkit.Bukkit;
-
 import java.util.UUID;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.lang.reflect.Method;
+import java.lang.reflect.Field;
 import java.util.logging.Level;
+import java.util.Collection;
+import java.util.ArrayList;
 
 /**
  * Manages Bedrock Forms GUI for TownyElections.
@@ -26,17 +17,31 @@ import java.util.logging.Level;
  * This is the main feature of the extension - providing Bedrock players with
  * native Forms GUI instead of the Java inventory GUI.
  * 
- * Uses reflection to avoid compile-time dependencies on TownyElections classes.
+ * Uses reflection to avoid compile-time dependencies.
  */
 public class ElectionFormsManager {
 
     private final TownyElectionsExtension extension;
-    private final GeyserAPI geyserAPI;
+    private final Object geyserAPI;
     private final TownyElectionsBridge bridge;
     private final Map<UUID, Long> lastFormSent = new HashMap<>();
     private boolean initialized = false;
+    
+    // Reflection cached references
+    private Class<?> geyserPlayerClass;
+    private Class<?> eventBusClass;
+    private Class<?> playerJoinEventClass;
+    private Class<?> playerQuitEventClass;
+    private Class<?> customFormClass;
+    private Class<?> simpleFormClass;
+    private Class<?> formResponseClass;
+    private Class<?> formBuilderClass;
+    private Class<?> customFormBuilderClass;
+    private Class<?> simpleFormBuilderClass;
+    private Class<?> bukkitClass;
+    private Class<?> schedulerClass;
 
-    public ElectionFormsManager(TownyElectionsExtension extension, GeyserAPI geyserAPI, TownyElectionsBridge bridge) {
+    public ElectionFormsManager(TownyElectionsExtension extension, Object geyserAPI, TownyElectionsBridge bridge) {
         this.extension = extension;
         this.geyserAPI = geyserAPI;
         this.bridge = bridge;
@@ -47,11 +52,29 @@ public class ElectionFormsManager {
             return;
         }
 
-        EventBus eventBus = geyserAPI.eventBus();
-        eventBus.subscribe(this);
+        try {
+            // Load classes
+            geyserPlayerClass = Class.forName("org.geysermc.api.connection.player.GeyserPlayer");
+            eventBusClass = Class.forName("org.geysermc.api.event.bus.EventBus");
+            playerJoinEventClass = Class.forName("org.geysermc.api.event.player.PlayerJoinEvent");
+            playerQuitEventClass = Class.forName("org.geysermc.api.event.player.PlayerQuitEvent");
+            customFormClass = Class.forName("org.geysermc.api.form.CustomForm");
+            simpleFormClass = Class.forName("org.geysermc.api.form.SimpleForm");
+            formResponseClass = Class.forName("org.geysermc.api.form.FormResponse");
+            bukkitClass = Class.forName("org.bukkit.Bukkit");
+            schedulerClass = Class.forName("org.bukkit.scheduler.BukkitScheduler");
+            
+            // Get event bus and subscribe
+            Method eventBusMethod = geyserAPI.getClass().getMethod("eventBus");
+            Object eventBus = eventBusMethod.invoke(geyserAPI);
+            Method subscribe = eventBusClass.getMethod("subscribe", Object.class);
+            subscribe.invoke(eventBus, this);
 
-        initialized = true;
-        extension.logger().info("ElectionFormsManager initialized - Bedrock Forms GUI enabled");
+            initialized = true;
+            extension.log(Level.INFO, "ElectionFormsManager initialized - Bedrock Forms GUI enabled");
+        } catch (Exception e) {
+            extension.log(Level.SEVERE, "Error initializing ElectionFormsManager: " + e.getMessage(), e);
+        }
     }
 
     public void shutdown() {
@@ -61,31 +84,46 @@ public class ElectionFormsManager {
 
         initialized = false;
         lastFormSent.clear();
-        extension.logger().info("ElectionFormsManager shutdown");
+        extension.log(Level.INFO, "ElectionFormsManager shutdown");
     }
 
-    @Subscribe
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        UUID playerId = event.getPlayer().getUuid();
-        
-        // Only handle Bedrock players
-        if (!bridge.isBedrockPlayer(playerId)) {
-            return;
+    public void onPlayerJoin(Object event) {
+        try {
+            Method getPlayer = playerJoinEventClass.getMethod("getPlayer");
+            Object geyserPlayerObj = getPlayer.invoke(event);
+            Method getUuid = geyserPlayerClass.getMethod("getUuid");
+            UUID playerId = (UUID) getUuid.invoke(geyserPlayerObj);
+            
+            // Only handle Bedrock players
+            if (!bridge.isBedrockPlayer(playerId)) {
+                return;
+            }
+
+            Method getUsername = geyserPlayerClass.getMethod("getUsername");
+            String username = (String) getUsername.invoke(geyserPlayerObj);
+            extension.log(Level.INFO, "Bedrock player joined: " + username + 
+                          " - Showing election form");
+            
+            // Send main election form after a short delay
+            Object plugin = extension.getTownyElectionsPlugin();
+            bridge.runTaskLater(plugin, () -> {
+                showMainElectionForm(playerId);
+            }, 20L); // 1 second delay
+        } catch (Exception e) {
+            extension.log(Level.WARNING, "Error handling player join: " + e.getMessage(), e);
         }
-
-        extension.logger().info("Bedrock player joined: " + event.getPlayer().getUsername() + 
-                              " - Showing election form");
-        
-        // Send main election form after a short delay
-        Bukkit.getScheduler().runTaskLater(extension.getTownyElectionsPlugin(), () -> {
-            showMainElectionForm(playerId);
-        }, 20L); // 1 second delay
     }
 
-    @Subscribe
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        UUID playerId = event.getPlayer().getUuid();
-        lastFormSent.remove(playerId);
+    public void onPlayerQuit(Object event) {
+        try {
+            Method getPlayer = playerQuitEventClass.getMethod("getPlayer");
+            Object geyserPlayerObj = getPlayer.invoke(event);
+            Method getUuid = geyserPlayerClass.getMethod("getUuid");
+            UUID playerId = (UUID) getUuid.invoke(geyserPlayerObj);
+            lastFormSent.remove(playerId);
+        } catch (Exception e) {
+            extension.log(Level.WARNING, "Error handling player quit: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -94,14 +132,13 @@ public class ElectionFormsManager {
      */
     public void showMainElectionForm(UUID playerId) {
         if (!bridge.isInitialized()) {
-            extension.logger().warning("Bridge not initialized, cannot show form");
+            extension.log(Level.WARNING, "Bridge not initialized, cannot show form");
             return;
         }
 
         Object election = bridge.getElectionForPlayer(playerId);
         
         if (election == null) {
-            // No active election in player's town
             showNoElectionForm(playerId);
             return;
         }
@@ -133,7 +170,7 @@ public class ElectionFormsManager {
                     showNoElectionForm(playerId);
             }
         } catch (Exception e) {
-            extension.logger().log(Level.WARNING, "Error getting phase name: " + e.getMessage(), e);
+            extension.log(Level.WARNING, "Error getting phase name: " + e.getMessage(), e);
             showNoElectionForm(playerId);
         }
     }
@@ -144,19 +181,19 @@ public class ElectionFormsManager {
     private void showNoElectionForm(UUID playerId) {
         String townName = bridge.getTownName(playerId);
         
-        GeyserPlayer geyserPlayer = bridge.getGeyserPlayer(playerId);
+        Object geyserPlayer = bridge.getGeyserPlayer(playerId);
         if (geyserPlayer == null) {
-            extension.logger().warning("Cannot get GeyserPlayer for " + playerId);
+            extension.log(Level.WARNING, "Cannot get GeyserPlayer for " + playerId);
             return;
         }
 
-        CustomForm.Builder formBuilder = CustomForm.builder();
-        formBuilder.title("Town Elections");
-        formBuilder.text("\u00a76No active election in " + townName);
-        formBuilder.text("\u00a77Elections will appear here when they start.");
-        formBuilder.button("\u00a7aOK", "close");
-        
-        sendForm(geyserPlayer, formBuilder.build());
+        Object formBuilder = bridge.createCustomForm();
+        bridge.setFormTitle(formBuilder, "Town Elections");
+        bridge.addFormText(formBuilder, "\u00a76No active election in " + townName);
+        bridge.addFormText(formBuilder, "\u00a77Elections will appear here when they start.");
+        bridge.addFormButton(formBuilder, "\u00a7aOK", "close");
+        Object form = bridge.buildForm(formBuilder);
+        bridge.sendForm(geyserPlayer, form);
     }
 
     /**
@@ -167,36 +204,35 @@ public class ElectionFormsManager {
         long timeRemaining = bridge.getTimeRemaining(playerId);
         String timeStr = formatTime(timeRemaining);
 
-        GeyserPlayer geyserPlayer = bridge.getGeyserPlayer(playerId);
+        Object geyserPlayer = bridge.getGeyserPlayer(playerId);
         if (geyserPlayer == null) {
             return;
         }
 
-        CustomForm.Builder formBuilder = CustomForm.builder();
-        formBuilder.title("\u00a76Town Election - " + townName);
-        formBuilder.text("\u00a7eNomination Phase");
-        formBuilder.text("\u00a77Time remaining: " + timeStr);
+        Object formBuilder = bridge.createCustomForm();
+        bridge.setFormTitle(formBuilder, "\u00a76Town Election - " + townName);
+        bridge.addFormText(formBuilder, "\u00a7eNomination Phase");
+        bridge.addFormText(formBuilder, "\u00a77Time remaining: " + timeStr);
         
         List<Object> candidates = bridge.getCandidates(playerId);
         if (candidates.isEmpty()) {
-            formBuilder.text("\u00a7cNo candidates have registered yet.");
+            bridge.addFormText(formBuilder, "\u00a7cNo candidates have registered yet.");
         } else {
-            formBuilder.text("\u00a7aCurrent Candidates:");
+            bridge.addFormText(formBuilder, "\u00a7aCurrent Candidates:");
             for (Object candidate : candidates) {
                 String candidateName = bridge.getCandidateName(candidate);
-                formBuilder.text("\u00a77- " + candidateName);
+                bridge.addFormText(formBuilder, "\u00a77- " + candidateName);
             }
         }
         
-        formBuilder.button("\u00a7aRefresh", "refresh");
-        formBuilder.button("\u00a7cClose", "close");
-        
-        sendForm(geyserPlayer, formBuilder.build());
+        bridge.addFormButton(formBuilder, "\u00a7aRefresh", "refresh");
+        bridge.addFormButton(formBuilder, "\u00a7cClose", "close");
+        Object form = bridge.buildForm(formBuilder);
+        bridge.sendForm(geyserPlayer, form);
     }
 
     /**
      * Show voting form with candidate selection buttons
-     * This is the main voting interface for Bedrock players
      */
     private void showVotingForm(UUID playerId, Object election) {
         String townName = bridge.getTownName(playerId);
@@ -204,7 +240,7 @@ public class ElectionFormsManager {
         String timeStr = formatTime(timeRemaining);
         boolean hasVoted = bridge.hasVoted(playerId);
 
-        GeyserPlayer geyserPlayer = bridge.getGeyserPlayer(playerId);
+        Object geyserPlayer = bridge.getGeyserPlayer(playerId);
         if (geyserPlayer == null) {
             return;
         }
@@ -221,13 +257,11 @@ public class ElectionFormsManager {
             return;
         }
 
-        // Use SimpleForm for candidate selection (one button per candidate)
-        SimpleForm.Builder formBuilder = SimpleForm.builder();
-        formBuilder.title("\u00a76Vote in " + townName + " Election");
-        formBuilder.text("\u00a77Time remaining: " + timeStr);
-        formBuilder.text("\u00a7aSelect a candidate to vote for:");
+        Object formBuilder = bridge.createSimpleForm();
+        bridge.setFormTitle(formBuilder, "\u00a76Vote in " + townName + " Election");
+        bridge.addFormText(formBuilder, "\u00a77Time remaining: " + timeStr);
+        bridge.addFormText(formBuilder, "\u00a7aSelect a candidate to vote for:");
         
-        // Add a button for each candidate
         for (Object candidate : candidates) {
             UUID candidateId = bridge.getCandidateId(candidate);
             String party = bridge.getCandidateParty(candidate);
@@ -238,40 +272,12 @@ public class ElectionFormsManager {
             if (party != null && !party.equals("Independent") && !party.isEmpty()) {
                 displayName = "\u00a7e[" + party + "] \u00a7f" + displayName;
             }
-            formBuilder.button(displayName, "vote_" + candidateId.toString());
+            bridge.addFormButton(formBuilder, displayName, "vote_" + candidateId.toString());
         }
         
-        // Add cancel button
-        formBuilder.button("\u00a7cCancel", "close");
-        
-        // Set form handler for button clicks
-        formBuilder.respondWith((response, form) -> {
-            handleVotingFormResponse(playerId, response);
-        });
-        
-        sendForm(geyserPlayer, formBuilder.build());
-    }
-
-    /**
-     * Handle response from voting form
-     */
-    private void handleVotingFormResponse(UUID playerId, FormResponse response) {
-        String clickedButton = response.getClickedButton().getValue();
-        
-        if (clickedButton.startsWith("vote_")) {
-            String candidateIdStr = clickedButton.substring(5);
-            try {
-                UUID candidateId = UUID.fromString(candidateIdStr);
-                boolean success = bridge.castVote(playerId, candidateId);
-                if (success) {
-                    showVoteConfirmationForm(playerId, candidateId);
-                } else {
-                    showVoteFailedForm(playerId);
-                }
-            } catch (Exception e) {
-                showVoteFailedForm(playerId);
-            }
-        }
+        bridge.addFormButton(formBuilder, "\u00a7cCancel", "close");
+        Object form = bridge.buildForm(formBuilder);
+        bridge.sendForm(geyserPlayer, form);
     }
 
     /**
@@ -284,25 +290,25 @@ public class ElectionFormsManager {
             votedCandidateId = ballot.get(0);
         }
 
-        GeyserPlayer geyserPlayer = bridge.getGeyserPlayer(playerId);
+        Object geyserPlayer = bridge.getGeyserPlayer(playerId);
         if (geyserPlayer == null) {
             return;
         }
 
-        CustomForm.Builder formBuilder = CustomForm.builder();
-        formBuilder.title("\u00a7aVote Cast!");
+        Object formBuilder = bridge.createCustomForm();
+        bridge.setFormTitle(formBuilder, "\u00a7aVote Cast!");
         
         if (votedCandidateId != null) {
             String candidateName = bridge.getCandidateName(bridge.getCandidate(votedCandidateId));
-            formBuilder.text("\u00a7aYou have already voted for:");
-            formBuilder.text("\u00a77\u00a7l" + candidateName + "\u00a7r");
+            bridge.addFormText(formBuilder, "\u00a7aYou have already voted for:");
+            bridge.addFormText(formBuilder, "\u00a77\u00a7l" + candidateName + "\u00a7r");
         } else {
-            formBuilder.text("\u00a7aYou have already voted.");
+            bridge.addFormText(formBuilder, "\u00a7aYou have already voted.");
         }
         
-        formBuilder.button("\u00a7aOK", "close");
-        
-        sendForm(geyserPlayer, formBuilder.build());
+        bridge.addFormButton(formBuilder, "\u00a7aOK", "close");
+        Object form = bridge.buildForm(formBuilder);
+        bridge.sendForm(geyserPlayer, form);
     }
 
     /**
@@ -314,54 +320,54 @@ public class ElectionFormsManager {
             candidateName = "the candidate";
         }
 
-        GeyserPlayer geyserPlayer = bridge.getGeyserPlayer(playerId);
+        Object geyserPlayer = bridge.getGeyserPlayer(playerId);
         if (geyserPlayer == null) {
             return;
         }
 
-        CustomForm.Builder formBuilder = CustomForm.builder();
-        formBuilder.title("\u00a7aVote Cast Successfully!");
-        formBuilder.text("\u00a77You voted for: \u00a7e" + candidateName);
-        formBuilder.text("\u00a7aThank you for participating!");
-        formBuilder.button("\u00a7aOK", "close");
-        
-        sendForm(geyserPlayer, formBuilder.build());
+        Object formBuilder = bridge.createCustomForm();
+        bridge.setFormTitle(formBuilder, "\u00a7aVote Cast Successfully!");
+        bridge.addFormText(formBuilder, "\u00a77You voted for: \u00a7e" + candidateName);
+        bridge.addFormText(formBuilder, "\u00a7aThank you for participating!");
+        bridge.addFormButton(formBuilder, "\u00a7aOK", "close");
+        Object form = bridge.buildForm(formBuilder);
+        bridge.sendForm(geyserPlayer, form);
     }
 
     /**
      * Show vote failed form
      */
     private void showVoteFailedForm(UUID playerId) {
-        GeyserPlayer geyserPlayer = bridge.getGeyserPlayer(playerId);
+        Object geyserPlayer = bridge.getGeyserPlayer(playerId);
         if (geyserPlayer == null) {
             return;
         }
 
-        CustomForm.Builder formBuilder = CustomForm.builder();
-        formBuilder.title("\u00a7cVote Failed");
-        formBuilder.text("\u00a7cCould not cast your vote.");
-        formBuilder.text("\u00a77You may have already voted or are not eligible.");
-        formBuilder.button("\u00a7aOK", "close");
-        
-        sendForm(geyserPlayer, formBuilder.build());
+        Object formBuilder = bridge.createCustomForm();
+        bridge.setFormTitle(formBuilder, "\u00a7cVote Failed");
+        bridge.addFormText(formBuilder, "\u00a7cCould not cast your vote.");
+        bridge.addFormText(formBuilder, "\u00a77You may have already voted or are not eligible.");
+        bridge.addFormButton(formBuilder, "\u00a7aOK", "close");
+        Object form = bridge.buildForm(formBuilder);
+        bridge.sendForm(geyserPlayer, form);
     }
 
     /**
      * Show form when there are no candidates to vote for
      */
     private void showNoCandidatesForm(UUID playerId) {
-        GeyserPlayer geyserPlayer = bridge.getGeyserPlayer(playerId);
+        Object geyserPlayer = bridge.getGeyserPlayer(playerId);
         if (geyserPlayer == null) {
             return;
         }
 
-        CustomForm.Builder formBuilder = CustomForm.builder();
-        formBuilder.title("\u00a7cNo Candidates");
-        formBuilder.text("\u00a7cThere are no candidates in this election.");
-        formBuilder.text("\u00a77Check back later when candidates register.");
-        formBuilder.button("\u00a7aOK", "close");
-        
-        sendForm(geyserPlayer, formBuilder.build());
+        Object formBuilder = bridge.createCustomForm();
+        bridge.setFormTitle(formBuilder, "\u00a7cNo Candidates");
+        bridge.addFormText(formBuilder, "\u00a7cThere are no candidates in this election.");
+        bridge.addFormText(formBuilder, "\u00a77Check back later when candidates register.");
+        bridge.addFormButton(formBuilder, "\u00a7aOK", "close");
+        Object form = bridge.buildForm(formBuilder);
+        bridge.sendForm(geyserPlayer, form);
     }
 
     /**
@@ -371,47 +377,31 @@ public class ElectionFormsManager {
         String townName = bridge.getTownName(playerId);
         int totalVotes = bridge.getTotalVotes(playerId);
 
-        GeyserPlayer geyserPlayer = bridge.getGeyserPlayer(playerId);
+        Object geyserPlayer = bridge.getGeyserPlayer(playerId);
         if (geyserPlayer == null) {
             return;
         }
 
-        CustomForm.Builder formBuilder = CustomForm.builder();
-        formBuilder.title("\u00a76Election Results - " + townName);
-        formBuilder.text("\u00a7aElection has concluded!");
-        formBuilder.text("\u00a77Total votes cast: " + totalVotes);
+        Object formBuilder = bridge.createCustomForm();
+        bridge.setFormTitle(formBuilder, "\u00a76Election Results - " + townName);
+        bridge.addFormText(formBuilder, "\u00a7aElection has concluded!");
+        bridge.addFormText(formBuilder, "\u00a77Total votes cast: " + totalVotes);
         
-        // Show candidates with vote counts
         List<Object> candidates = bridge.getCandidates(playerId);
         if (!candidates.isEmpty()) {
-            formBuilder.text("\u00a76Results:");
+            bridge.addFormText(formBuilder, "\u00a76Results:");
             Map<UUID, Integer> tally = bridge.getVoteTally(playerId);
             for (Object candidate : candidates) {
                 UUID candidateId = bridge.getCandidateId(candidate);
                 String candidateName = bridge.getCandidateName(candidate);
                 int votes = tally.getOrDefault(candidateId, 0);
-                formBuilder.text("\u00a77" + candidateName + ": " + votes + " votes");
+                bridge.addFormText(formBuilder, "\u00a77" + candidateName + ": " + votes + " votes");
             }
         }
         
-        formBuilder.button("\u00a7aOK", "close");
-        
-        sendForm(geyserPlayer, formBuilder.build());
-    }
-
-    /**
-     * Send a form to a GeyserPlayer
-     */
-    private void sendForm(GeyserPlayer geyserPlayer, Object form) {
-        try {
-            if (form instanceof CustomForm) {
-                geyserPlayer.sendForm((CustomForm) form);
-            } else if (form instanceof SimpleForm) {
-                geyserPlayer.sendForm((SimpleForm) form);
-            }
-        } catch (Exception e) {
-            extension.logger().warning("Error sending form to " + geyserPlayer.getUsername() + ": " + e.getMessage());
-        }
+        bridge.addFormButton(formBuilder, "\u00a7aOK", "close");
+        Object form = bridge.buildForm(formBuilder);
+        bridge.sendForm(geyserPlayer, form);
     }
 
     /**

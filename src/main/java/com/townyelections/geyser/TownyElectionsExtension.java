@@ -1,16 +1,8 @@
 package com.townyelections.geyser;
 
-import org.geysermc.api.GeyserAPI;
-import org.geysermc.api.extension.Extension;
-import org.geysermc.api.extension.ExtensionLogger;
-import org.geysermc.api.event.GeyserPreInitializeEvent;
-import org.geysermc.api.event.GeyserPostInitializeEvent;
-import org.geysermc.api.event.GeyserShutdownEvent;
-import org.geysermc.api.event.Subscribe;
-import org.geysermc.api.event.bus.EventBus;
-
-import org.bukkit.Bukkit;
-import org.bukkit.plugin.Plugin;
+import java.util.UUID;
+import java.lang.reflect.Method;
+import java.util.logging.Level;
 
 /**
  * TownyElections Geyser Extension
@@ -21,58 +13,87 @@ import org.bukkit.plugin.Plugin;
  * 
  * Requires Geyser 2.9.0+ for Forms API support.
  */
-public class TownyElectionsExtension implements Extension {
+public class TownyElectionsExtension {
 
-    private ExtensionLogger logger;
-    private GeyserAPI geyserAPI;
-    private Plugin townyElectionsPlugin;
+    private Object logger;
+    private Object geyserAPI;
+    private Object townyElectionsPlugin;
     private ElectionFormsManager formsManager;
     private TownyElectionsBridge bridge;
+    
+    // Reflection cached references
+    private Class<?> extensionLoggerClass;
+    private Class<?> geyserAPIClass;
+    private Class<?> pluginClass;
+    private Class<?> eventBusClass;
+    private Class<?> subscribeAnnotationClass;
+    private Class<?> bukkitClass;
+    private Class<?> pluginManagerClass;
 
-    @Override
-    public ExtensionLogger logger() {
-        return logger;
+    public TownyElectionsExtension() {
     }
 
-    @Override
-    public void onEnable(ExtensionLogger logger) {
+    public void onEnable(Object logger) {
         this.logger = logger;
+        extensionLoggerClass = logger.getClass();
     }
 
-    @Subscribe
-    public void onPreInitialize(GeyserPreInitializeEvent event) {
-        geyserAPI = event.getApi();
-        logger().info("TownyElections Geyser Extension pre-initializing...");
-    }
-
-    @Subscribe
-    public void onPostInitialize(GeyserPostInitializeEvent event) {
-        logger().info("TownyElections Geyser Extension initializing...");
-        
-        // Check if TownyElections plugin is available
-        Plugin plugin = Bukkit.getPluginManager().getPlugin("TownyElections");
-        if (plugin == null) {
-            logger().severe("TownyElections plugin not found! The extension requires TownyElections to be installed.");
-            return;
+    public void onPreInitialize(Object event) {
+        try {
+            geyserAPIClass = Class.forName("org.geysermc.api.GeyserAPI");
+            Method getApi = event.getClass().getMethod("getApi");
+            geyserAPI = getApi.invoke(event);
+            log(Level.INFO, "TownyElections Geyser Extension pre-initializing...");
+        } catch (Exception e) {
+            log(Level.SEVERE, "Error in pre-initialize: " + e.getMessage(), e);
         }
-        
-        townyElectionsPlugin = plugin;
-        logger().info("Found TownyElections plugin v" + plugin.getDescription().getVersion());
-        
-        // Initialize the bridge and forms manager
-        bridge = new TownyElectionsBridge(this, geyserAPI);
-        bridge.initialize();
-        
-        formsManager = new ElectionFormsManager(this, geyserAPI, bridge);
-        formsManager.initialize();
-        
-        logger().info("TownyElections Geyser Extension enabled successfully!");
-        logger().info("Bedrock players will now see native Forms GUI for elections.");
     }
 
-    @Subscribe
-    public void onShutdown(GeyserShutdownEvent event) {
-        logger().info("TownyElections Geyser Extension shutting down...");
+    public void onPostInitialize(Object event) {
+        try {
+            log(Level.INFO, "TownyElections Geyser Extension initializing...");
+            
+            // Load classes
+            pluginClass = Class.forName("org.bukkit.plugin.Plugin");
+            bukkitClass = Class.forName("org.bukkit.Bukkit");
+            pluginManagerClass = Class.forName("org.bukkit.plugin.PluginManager");
+            eventBusClass = Class.forName("org.geysermc.api.event.bus.EventBus");
+            subscribeAnnotationClass = Class.forName("org.geysermc.api.event.Subscribe");
+            
+            // Check if TownyElections plugin is available
+            Method getPluginManager = bukkitClass.getMethod("getPluginManager");
+            Object pluginManager = getPluginManager.invoke(null);
+            Method getPlugin = pluginManagerClass.getMethod("getPlugin", String.class);
+            Object plugin = getPlugin.invoke(pluginManager, "TownyElections");
+            
+            if (plugin == null) {
+                log(Level.SEVERE, "TownyElections plugin not found! The extension requires TownyElections to be installed.");
+                return;
+            }
+            
+            townyElectionsPlugin = plugin;
+            Method getDescription = pluginClass.getMethod("getDescription");
+            Object description = getDescription.invoke(plugin);
+            Method getVersion = description.getClass().getMethod("getVersion");
+            String version = (String) getVersion.invoke(description);
+            log(Level.INFO, "Found TownyElections plugin v" + version);
+            
+            // Initialize the bridge and forms manager
+            bridge = new TownyElectionsBridge(this, geyserAPI);
+            bridge.initialize();
+            
+            formsManager = new ElectionFormsManager(this, geyserAPI, bridge);
+            formsManager.initialize();
+            
+            log(Level.INFO, "TownyElections Geyser Extension enabled successfully!");
+            log(Level.INFO, "Bedrock players will now see native Forms GUI for elections.");
+        } catch (Exception e) {
+            log(Level.SEVERE, "Error in post-initialize: " + e.getMessage(), e);
+        }
+    }
+
+    public void onShutdown(Object event) {
+        log(Level.INFO, "TownyElections Geyser Extension shutting down...");
         
         if (formsManager != null) {
             formsManager.shutdown();
@@ -82,14 +103,37 @@ public class TownyElectionsExtension implements Extension {
             bridge.shutdown();
         }
         
-        logger().info("TownyElections Geyser Extension disabled.");
+        log(Level.INFO, "TownyElections Geyser Extension disabled.");
     }
 
-    public GeyserAPI getGeyserAPI() {
+    public void log(Level level, String message) {
+        try {
+            Method logMethod = extensionLoggerClass.getMethod("log", Level.class, String.class);
+            logMethod.invoke(logger, level, message);
+        } catch (Exception e) {
+            System.err.println("[TownyElections-geyser] " + level + ": " + message);
+        }
+    }
+
+    public void log(Level level, String message, Throwable throwable) {
+        try {
+            Method logMethod = extensionLoggerClass.getMethod("log", Level.class, String.class, Throwable.class);
+            logMethod.invoke(logger, level, message, throwable);
+        } catch (Exception e) {
+            System.err.println("[TownyElections-geyser] " + level + ": " + message);
+            throwable.printStackTrace();
+        }
+    }
+
+    public Object getLogger() {
+        return logger;
+    }
+
+    public Object getGeyserAPI() {
         return geyserAPI;
     }
 
-    public Plugin getTownyElectionsPlugin() {
+    public Object getTownyElectionsPlugin() {
         return townyElectionsPlugin;
     }
 
