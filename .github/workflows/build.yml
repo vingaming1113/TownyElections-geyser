@@ -31,3 +31,16 @@ jobs:
         name: TownyElections-geyser
         path: build/libs/*.jar
         retention-days: 7
+    
+    - name: Create nightly release
+      uses: softprops/action-gh-release@v2
+      if: github.ref == 'refs/heads/main' && success()
+      with:
+        name: Nightly Build - ${{ github.sha }}
+        tag_name: nightly-${{ github.sha }}
+        files: build/libs/*.jar
+        prerelease: true
+        generate_release_notes: false
+        fail_on_unmatched_files: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
