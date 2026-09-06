@@ -8,14 +8,14 @@ version '1.0.0'
 
 repositories {
     mavenCentral()
-    maven { url 'https://repo.geysermc.org/repository/public/' }
+    maven { url 'https://repo.opencollab.dev/main/' }
     maven { url 'https://repo.papermc.io/repository/maven-public/' }
     maven { url 'https://jitpack.io' }
 }
 
 dependencies {
-    // Geyser API - Required for Forms API (2.9.0+)
-    compileOnly 'org.geysermc:api:2.9.0'
+    // Geyser API - Required for Forms API
+    compileOnly 'org.geysermc.geyser:api:2.10.0-SNAPSHOT'
     
     // TownyElections API
     compileOnly 'com.github.vingaming1113:TownyElections:1.2.0'
