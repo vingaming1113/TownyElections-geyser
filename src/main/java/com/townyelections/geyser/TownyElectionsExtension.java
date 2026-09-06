@@ -7,6 +7,7 @@ import org.geysermc.api.event.GeyserPreInitializeEvent;
 import org.geysermc.api.event.GeyserPostInitializeEvent;
 import org.geysermc.api.event.GeyserShutdownEvent;
 import org.geysermc.api.event.Subscribe;
+import org.geysermc.api.event.bus.EventBus;
 
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
@@ -41,22 +42,22 @@ public class TownyElectionsExtension implements Extension {
     @Subscribe
     public void onPreInitialize(GeyserPreInitializeEvent event) {
         geyserAPI = event.getApi();
-        logger.info("TownyElections Geyser Extension pre-initializing...");
+        logger().info("TownyElections Geyser Extension pre-initializing...");
     }
 
     @Subscribe
     public void onPostInitialize(GeyserPostInitializeEvent event) {
-        logger.info("TownyElections Geyser Extension initializing...");
+        logger().info("TownyElections Geyser Extension initializing...");
         
         // Check if TownyElections plugin is available
         Plugin plugin = Bukkit.getPluginManager().getPlugin("TownyElections");
         if (plugin == null) {
-            logger.severe("TownyElections plugin not found! The extension requires TownyElections to be installed.");
+            logger().severe("TownyElections plugin not found! The extension requires TownyElections to be installed.");
             return;
         }
         
         townyElectionsPlugin = plugin;
-        logger.info("Found TownyElections plugin v" + plugin.getDescription().getVersion());
+        logger().info("Found TownyElections plugin v" + plugin.getDescription().getVersion());
         
         // Initialize the bridge and forms manager
         bridge = new TownyElectionsBridge(this, geyserAPI);
@@ -65,13 +66,13 @@ public class TownyElectionsExtension implements Extension {
         formsManager = new ElectionFormsManager(this, geyserAPI, bridge);
         formsManager.initialize();
         
-        logger.info("TownyElections Geyser Extension enabled successfully!");
-        logger.info("Bedrock players will now see native Forms GUI for elections.");
+        logger().info("TownyElections Geyser Extension enabled successfully!");
+        logger().info("Bedrock players will now see native Forms GUI for elections.");
     }
 
     @Subscribe
     public void onShutdown(GeyserShutdownEvent event) {
-        logger.info("TownyElections Geyser Extension shutting down...");
+        logger().info("TownyElections Geyser Extension shutting down...");
         
         if (formsManager != null) {
             formsManager.shutdown();
@@ -81,7 +82,7 @@ public class TownyElectionsExtension implements Extension {
             bridge.shutdown();
         }
         
-        logger.info("TownyElections Geyser Extension disabled.");
+        logger().info("TownyElections Geyser Extension disabled.");
     }
 
     public GeyserAPI getGeyserAPI() {

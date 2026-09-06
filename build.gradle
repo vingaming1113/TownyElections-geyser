@@ -8,10 +8,12 @@ version '1.0.0'
 
 repositories {
     mavenCentral()
+    maven { url 'https://repo.opencollab.dev/main/' }
 }
 
 dependencies {
-    // No compile-time dependencies needed - Geyser provides its API at runtime
+    // Geyser API - provided by Geyser at runtime, but needed for compilation
+    compileOnly 'org.geysermc.geyser:api:2.10.0-SNAPSHOT'
 }
 
 shadowJar {

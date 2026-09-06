@@ -12,14 +12,12 @@ import org.geysermc.api.form.FormResponse;
 
 import org.bukkit.Bukkit;
 
-import com.townyelections.model.Election;
-import com.townyelections.model.ElectionPhase;
-import com.townyelections.model.Candidate;
-
 import java.util.UUID;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import java.lang.reflect.Method;
+import java.util.logging.Level;
 
 /**
  * Manages Bedrock Forms GUI for TownyElections.
@@ -27,6 +25,8 @@ import java.util.Map;
  * 
  * This is the main feature of the extension - providing Bedrock players with
  * native Forms GUI instead of the Java inventory GUI.
+ * 
+ * Uses reflection to avoid compile-time dependencies on TownyElections classes.
  */
 public class ElectionFormsManager {
 
@@ -98,7 +98,7 @@ public class ElectionFormsManager {
             return;
         }
 
-        Election election = bridge.getElectionForPlayer(playerId);
+        Object election = bridge.getElectionForPlayer(playerId);
         
         if (election == null) {
             // No active election in player's town
@@ -106,21 +106,35 @@ public class ElectionFormsManager {
             return;
         }
 
-        ElectionPhase phase = election.getPhase();
+        Object phase = bridge.getElectionPhase(playerId);
         
-        switch (phase) {
-            case NOMINATION:
-                showNominationForm(playerId, election);
-                break;
-            case VOTING:
-            case RUNOFF:
-                showVotingForm(playerId, election);
-                break;
-            case CONCLUDED:
-                showResultsForm(playerId, election);
-                break;
-            default:
-                showNoElectionForm(playerId);
+        if (phase == null) {
+            showNoElectionForm(playerId);
+            return;
+        }
+
+        // Use reflection to get phase name
+        try {
+            Method nameMethod = phase.getClass().getMethod("name");
+            String phaseName = (String) nameMethod.invoke(phase);
+            
+            switch (phaseName) {
+                case "NOMINATION":
+                    showNominationForm(playerId, election);
+                    break;
+                case "VOTING":
+                case "RUNOFF":
+                    showVotingForm(playerId, election);
+                    break;
+                case "CONCLUDED":
+                    showResultsForm(playerId, election);
+                    break;
+                default:
+                    showNoElectionForm(playerId);
+            }
+        } catch (Exception e) {
+            extension.logger().log(Level.WARNING, "Error getting phase name: " + e.getMessage(), e);
+            showNoElectionForm(playerId);
         }
     }
 
@@ -148,7 +162,7 @@ public class ElectionFormsManager {
     /**
      * Show nomination phase form - displays current candidates
      */
-    private void showNominationForm(UUID playerId, Election election) {
+    private void showNominationForm(UUID playerId, Object election) {
         String townName = bridge.getTownName(playerId);
         long timeRemaining = bridge.getTimeRemaining(playerId);
         String timeStr = formatTime(timeRemaining);
@@ -163,13 +177,14 @@ public class ElectionFormsManager {
         formBuilder.text("\u00a7eNomination Phase");
         formBuilder.text("\u00a77Time remaining: " + timeStr);
         
-        List<Candidate> candidates = bridge.getCandidates(playerId);
+        List<Object> candidates = bridge.getCandidates(playerId);
         if (candidates.isEmpty()) {
             formBuilder.text("\u00a7cNo candidates have registered yet.");
         } else {
             formBuilder.text("\u00a7aCurrent Candidates:");
-            for (Candidate candidate : candidates) {
-                formBuilder.text("\u00a77- " + candidate.getName());
+            for (Object candidate : candidates) {
+                String candidateName = bridge.getCandidateName(candidate);
+                formBuilder.text("\u00a77- " + candidateName);
             }
         }
         
@@ -183,7 +198,7 @@ public class ElectionFormsManager {
      * Show voting form with candidate selection buttons
      * This is the main voting interface for Bedrock players
      */
-    private void showVotingForm(UUID playerId, Election election) {
+    private void showVotingForm(UUID playerId, Object election) {
         String townName = bridge.getTownName(playerId);
         long timeRemaining = bridge.getTimeRemaining(playerId);
         String timeStr = formatTime(timeRemaining);
@@ -199,7 +214,7 @@ public class ElectionFormsManager {
             return;
         }
 
-        List<Candidate> candidates = bridge.getCandidates(playerId);
+        List<Object> candidates = bridge.getCandidates(playerId);
         
         if (candidates.isEmpty()) {
             showNoCandidatesForm(playerId);
@@ -213,13 +228,17 @@ public class ElectionFormsManager {
         formBuilder.text("\u00a7aSelect a candidate to vote for:");
         
         // Add a button for each candidate
-        for (Candidate candidate : candidates) {
-            String party = candidate.getPartyName();
-            String displayName = candidate.getName();
-            if (party != null && !party.equals("Independent") && !party.isEmpty()) {
-                displayName = "\u00a7e[" + party + "] \u00a7f" + candidate.getName();
+        for (Object candidate : candidates) {
+            UUID candidateId = bridge.getCandidateId(candidate);
+            String party = bridge.getCandidateParty(candidate);
+            String displayName = bridge.getCandidateName(candidate);
+            if (candidateId == null) {
+                continue;
             }
-            formBuilder.button(displayName, "vote_" + candidate.getUuid().toString());
+            if (party != null && !party.equals("Independent") && !party.isEmpty()) {
+                displayName = "\u00a7e[" + party + "] \u00a7f" + displayName;
+            }
+            formBuilder.button(displayName, "vote_" + candidateId.toString());
         }
         
         // Add cancel button
@@ -258,11 +277,11 @@ public class ElectionFormsManager {
     /**
      * Show form when player has already voted
      */
-    private void showAlreadyVotedForm(UUID playerId, Election election) {
-        Candidate votedCandidate = null;
-        List<UUID> ballot = election.getBallot(playerId);
+    private void showAlreadyVotedForm(UUID playerId, Object election) {
+        UUID votedCandidateId = null;
+        List<UUID> ballot = bridge.getBallot(playerId);
         if (!ballot.isEmpty()) {
-            votedCandidate = election.getCandidate(ballot.get(0));
+            votedCandidateId = ballot.get(0);
         }
 
         GeyserPlayer geyserPlayer = bridge.getGeyserPlayer(playerId);
@@ -273,9 +292,10 @@ public class ElectionFormsManager {
         CustomForm.Builder formBuilder = CustomForm.builder();
         formBuilder.title("\u00a7aVote Cast!");
         
-        if (votedCandidate != null) {
+        if (votedCandidateId != null) {
+            String candidateName = bridge.getCandidateName(bridge.getCandidate(votedCandidateId));
             formBuilder.text("\u00a7aYou have already voted for:");
-            formBuilder.text("\u00a77\u00a7l" + votedCandidate.getName() + "\u00a7r");
+            formBuilder.text("\u00a77\u00a7l" + candidateName + "\u00a7r");
         } else {
             formBuilder.text("\u00a7aYou have already voted.");
         }
@@ -289,8 +309,10 @@ public class ElectionFormsManager {
      * Show vote confirmation form after successful vote
      */
     private void showVoteConfirmationForm(UUID playerId, UUID candidateId) {
-        Candidate candidate = bridge.getCandidate(candidateId);
-        String candidateName = candidate != null ? candidate.getName() : "Unknown";
+        String candidateName = bridge.getCandidateName(bridge.getCandidate(candidateId));
+        if (candidateName == null || candidateName.equals("Unknown")) {
+            candidateName = "the candidate";
+        }
 
         GeyserPlayer geyserPlayer = bridge.getGeyserPlayer(playerId);
         if (geyserPlayer == null) {
@@ -345,9 +367,9 @@ public class ElectionFormsManager {
     /**
      * Show election results form when election has concluded
      */
-    private void showResultsForm(UUID playerId, Election election) {
+    private void showResultsForm(UUID playerId, Object election) {
         String townName = bridge.getTownName(playerId);
-        int totalVotes = election.getTotalVotes();
+        int totalVotes = bridge.getTotalVotes(playerId);
 
         GeyserPlayer geyserPlayer = bridge.getGeyserPlayer(playerId);
         if (geyserPlayer == null) {
@@ -360,13 +382,15 @@ public class ElectionFormsManager {
         formBuilder.text("\u00a77Total votes cast: " + totalVotes);
         
         // Show candidates with vote counts
-        List<Candidate> candidates = bridge.getCandidates(playerId);
+        List<Object> candidates = bridge.getCandidates(playerId);
         if (!candidates.isEmpty()) {
             formBuilder.text("\u00a76Results:");
-            Map<UUID, Integer> tally = election.tally();
-            for (Candidate candidate : candidates) {
-                int votes = tally.getOrDefault(candidate.getUuid(), 0);
-                formBuilder.text("\u00a77" + candidate.getName() + ": " + votes + " votes");
+            Map<UUID, Integer> tally = bridge.getVoteTally(playerId);
+            for (Object candidate : candidates) {
+                UUID candidateId = bridge.getCandidateId(candidate);
+                String candidateName = bridge.getCandidateName(candidate);
+                int votes = tally.getOrDefault(candidateId, 0);
+                formBuilder.text("\u00a77" + candidateName + ": " + votes + " votes");
             }
         }
         
