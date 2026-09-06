@@ -20,13 +20,10 @@ jobs:
         distribution: 'temurin'
         cache: 'gradle'
     
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
-      with:
-        gradle-version: 8.10.2
-    
     - name: Build with Gradle
-      run: ./gradlew build shadowJar
+      uses: gradle/gradle-build-action@v3
+      with:
+        arguments: build shadowJar
         
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
