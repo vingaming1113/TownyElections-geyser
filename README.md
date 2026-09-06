@@ -4,28 +4,30 @@
 [![GitHub Release](https://img.shields.io/github/v/release/vingaming1113/TownyElections-geyser?style=flat-square)](https://github.com/vingaming1113/TownyElections-geyser/releases)
 [![GitHub License](https://img.shields.io/github/license/vingaming1113/TownyElections-geyser?style=flat-square)](https://github.com/vingaming1113/TownyElections-geyser/blob/main/LICENSE)
 
-**TownyElections-geyser** is a [GeyserMC](https://geysermc.org) extension that brings [TownyElections](https://github.com/vingaming1113/TownyElections) functionality to Bedrock Edition players.
+**TownyElections-geyser** is a [GeyserMC](https://geysermc.org) extension that provides **native Bedrock Forms GUI** for [TownyElections](https://github.com/vingaming1113/TownyElections).
+
+This allows Bedrock Edition players to use **native Bedrock forms** instead of the Java inventory GUI for all election interactions, providing a much better user experience for Bedrock players.
 
 ## Features
 
-- **Full Election Participation**: Bedrock players can vote in town elections alongside Java players
-- **Real-time Notifications**: Bedrock players receive notifications about active elections in their towns
-- **Bedrock-specific Commands**: Optimized commands for Bedrock players:
-  - `/townyelections vote <candidate>` - Cast your vote
-  - `/townyelections candidates` - List all candidates
-  - `/townyelections status` - Check election status
-- **Seamless Integration**: Works with all TownyElections features including:
-  - Multiple voting systems (Plurality, Ranked Choice, Approval)
-  - Party support
-  - Election phases (Nomination, Voting, Runoff)
-  - Candidate management
+- **Native Bedrock Forms GUI**: Bedrock players see beautiful native forms instead of inventory GUIs
+- **Automatic Form Display**: Forms are automatically shown to Bedrock players when they join
+- **Full Election Support**: Works with all TownyElections features:
+  - Nomination phase (view candidates)
+  - Voting phase (vote for candidates with one click)
+  - Results display (view election results)
+- **Candidate Selection**: Easy one-click voting with candidate buttons
+- **Party Display**: Shows candidate party affiliations with colors
+- **Time Remaining**: Shows countdown for current election phase
+- **Vote Confirmation**: Confirms successful vote casting
+- **Error Handling**: Shows user-friendly messages for errors
 
 ## Installation
 
 ### Prerequisites
 
 - **Minecraft Server**: Paper, Spigot, or any fork supporting plugins
-- **GeyserMC**: Version 2.9.0 or higher
+- **GeyserMC**: Version 2.9.0 or higher (required for Forms API)
 - **Towny**: Version 0.102.0.13 or higher
 - **TownyElections**: Version 1.2.0 or higher
 - **Java**: Java 21 or higher
@@ -35,29 +37,30 @@
 1. **Install TownyElections** on your server (if not already installed)
 2. **Install GeyserMC** following the [official installation guide](https://geysermc.org/download/)
 3. **Download** the latest TownyElections-geyser extension from [Releases](https://github.com/vingaming1113/TownyElections-geyser/releases)
-4. **Place** the `.jar` file in Geyser's `extensions` folder
+4. **Place** the `.jar` file in Geyser's `extensions` folder (not the server's plugins folder!)
 5. **Restart** Geyser or your server
 
 ## Usage
 
 ### For Bedrock Players
 
-Once installed, Bedrock players can use the following commands:
+**No commands needed!** When a Bedrock player joins the server:
 
-```
-/townyelections vote <candidate>    - Vote for a candidate
-/townyelections candidates          - List all candidates in your town's election
-/townyelections status              - Check the status of your town's election
-```
+1. **If there's an active election in their town**, they will automatically see a form:
+   - **Nomination Phase**: Shows current candidates and time remaining
+   - **Voting Phase**: Shows all candidates as clickable buttons to vote
+   - **Results Phase**: Shows election results with vote counts
+
+2. **Voting**: Simply click on a candidate's button to vote for them
+3. **Confirmation**: After voting, they'll see a confirmation form
 
 ### For Server Admins
 
-The extension automatically:
-- Detects when Bedrock players join
-- Notifies them of active elections in their towns
-- Allows them to participate in all election activities
-
-No additional configuration is required beyond installing the extension.
+The extension works automatically. Bedrock players will:
+- Receive election forms automatically when they join
+- See forms appropriate to their town's election status
+- Be able to vote with one click
+- See confirmation and error messages in native Bedrock forms
 
 ## Building from Source
 
@@ -89,17 +92,20 @@ Currently, TownyElections-geyser requires no additional configuration. All setti
 
 ### Common Issues
 
-- **Extension not loading**: Ensure you have Geyser 2.9.0+ and TownyElections 1.2.0+
-- **Commands not working**: Check that the extension is in Geyser's `extensions` folder, not the server's `plugins` folder
-- **Bedrock players can't vote**: Verify they are residents of a town with an active election
+- **Forms not showing**: Ensure you have Geyser 2.9.0+ (Forms API was added in 2.9.0)
+- **Extension not loading**: Check that the JAR is in Geyser's `extensions` folder, not the server's `plugins` folder
+- **Players can't vote**: Verify they are residents of a town with an active election
+- **Errors in console**: Enable debug logging in Geyser's config:
+  ```yaml
+  geyser:
+    debug: true
+  ```
 
-### Debugging
+### Checking if it Works
 
-Enable debug logging in Geyser's config to see extension loading messages:
-```yaml
-geyser:
-  debug: true
-```
+1. Join as a Bedrock player
+2. Check the Geyser console for: `TownyElections Geyser Extension enabled successfully!`
+3. You should automatically receive an election form when you join
 
 ## Contributing
 
@@ -109,11 +115,12 @@ Contributions are welcome! Please read our [Contributing Guide](https://github.c
 
 When reporting issues, please include:
 - Minecraft version
-- Geyser version
+- Geyser version (must be 2.9.0+)
 - TownyElections version
 - TownyElections-geyser version
 - Server software (Paper, Spigot, etc.)
-- Error logs or screenshots
+- Screenshot of the form (if applicable)
+- Error logs from Geyser console
 
 ## License
 
@@ -124,6 +131,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [TownyElections](https://github.com/vingaming1113/TownyElections) - Main plugin
 - [GeyserMC](https://geysermc.org) - Bedrock to Java proxy
 - [Geyser Extensions Documentation](https://geysermc.org/wiki/geyser/extensions)
+- [Geyser Forms API Documentation](https://geysermc.org/wiki/geyser/forms)
 
 ## Support
 

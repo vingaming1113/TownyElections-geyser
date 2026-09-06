@@ -14,10 +14,10 @@ repositories {
 }
 
 dependencies {
-    // Geyser API
+    // Geyser API - Required for Forms API (2.9.0+)
     compileOnly 'org.geysermc:api:2.9.0'
     
-    // TownyElections API (we'll depend on the main plugin)
+    // TownyElections API
     compileOnly 'com.github.vingaming1113:TownyElections:1.2.0'
     
     // Paper API for Bukkit/Spigot compatibility
@@ -30,6 +30,7 @@ dependencies {
 shadowJar {
     archiveFileName = "TownyElections-geyser-${version}.jar"
     
+    // Relocate Geyser API to avoid conflicts
     relocate 'org.geysermc', 'com.townyelections.geyser.libs.geysermc'
     
     // Don't relocate our own classes

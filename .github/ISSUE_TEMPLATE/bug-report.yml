@@ -20,11 +20,11 @@ Steps to reproduce the behavior:
 A clear description of what you expected to happen.
 
 ### **Screenshots/Logs**
-If applicable, add screenshots or error logs to help explain your problem.
+If applicable, add screenshots of the form or error logs to help explain your problem.
 
 ### **Server Information**
 - **Minecraft Version:** [e.g., 1.21.4]
-- **Geyser Version:** [e.g., 2.4.0]
+- **Geyser Version:** [e.g., 2.9.0+] (Forms API requires 2.9.0+)
 - **TownyElections Version:** [e.g., 1.2.0]
 - **TownyElections-geyser Version:** [e.g., 1.0.0]
 - **Server Software:** [e.g., Paper, Spigot, Purpur]

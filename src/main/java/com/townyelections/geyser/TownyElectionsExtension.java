@@ -1,11 +1,11 @@
 package com.townyelections.geyser;
 
 import org.geysermc.api.GeyserAPI;
+import org.geysermc.api.extension.Extension;
+import org.geysermc.api.extension.ExtensionLogger;
 import org.geysermc.api.event.GeyserPreInitializeEvent;
 import org.geysermc.api.event.GeyserPostInitializeEvent;
 import org.geysermc.api.event.GeyserShutdownEvent;
-import org.geysermc.api.extension.Extension;
-import org.geysermc.api.extension.ExtensionLogger;
 import org.geysermc.api.event.Subscribe;
 
 import org.bukkit.Bukkit;
@@ -14,15 +14,18 @@ import org.bukkit.plugin.Plugin;
 /**
  * TownyElections Geyser Extension
  * 
- * This extension bridges TownyElections functionality to Bedrock Edition players
- * connecting through GeyserMC. It provides compatibility and enhanced features
- * for Bedrock players participating in town elections.
+ * Provides native Bedrock Forms GUI for TownyElections.
+ * This allows Bedrock players to use native Bedrock forms instead of 
+ * the Java inventory GUI for all election interactions.
+ * 
+ * Requires Geyser 2.9.0+ for Forms API support.
  */
 public class TownyElectionsExtension implements Extension {
 
     private ExtensionLogger logger;
     private GeyserAPI geyserAPI;
     private Plugin townyElectionsPlugin;
+    private ElectionFormsManager formsManager;
     private TownyElectionsBridge bridge;
 
     @Override
@@ -55,16 +58,24 @@ public class TownyElectionsExtension implements Extension {
         townyElectionsPlugin = plugin;
         logger.info("Found TownyElections plugin v" + plugin.getDescription().getVersion());
         
-        // Initialize the bridge
+        // Initialize the bridge and forms manager
         bridge = new TownyElectionsBridge(this, geyserAPI);
         bridge.initialize();
         
+        formsManager = new ElectionFormsManager(this, geyserAPI, bridge);
+        formsManager.initialize();
+        
         logger.info("TownyElections Geyser Extension enabled successfully!");
+        logger.info("Bedrock players will now see native Forms GUI for elections.");
     }
 
     @Subscribe
     public void onShutdown(GeyserShutdownEvent event) {
         logger.info("TownyElections Geyser Extension shutting down...");
+        
+        if (formsManager != null) {
+            formsManager.shutdown();
+        }
         
         if (bridge != null) {
             bridge.shutdown();
@@ -79,6 +90,10 @@ public class TownyElectionsExtension implements Extension {
 
     public Plugin getTownyElectionsPlugin() {
         return townyElectionsPlugin;
+    }
+
+    public ElectionFormsManager getFormsManager() {
+        return formsManager;
     }
 
     public TownyElectionsBridge getBridge() {
