@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Join our Discord
+    url: https://discord.gg/EXAMPLE
+    about: Get help and discuss with the community on Discord
+  - name: GeyserMC Discord
+    url: https://discord.gg/geysermc
+    about: Get help with GeyserMC related issues
