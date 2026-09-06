@@ -17,13 +17,14 @@ jobs:
       with:
         java-version: '21'
         distribution: 'temurin'
-        cache: 'gradle'
     
-    - name: Build with Gradle
-      uses: gradle/gradle-build-action@v3
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
       with:
         gradle-version: 8.10.2
-        arguments: build shadowJar
+    
+    - name: Build with Gradle
+      run: ./gradlew build shadowJar
         
     - name: Create nightly artifact name
       id: nightly
