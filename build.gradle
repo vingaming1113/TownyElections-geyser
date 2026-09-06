@@ -9,32 +9,15 @@ version '1.0.0'
 repositories {
     mavenCentral()
     maven { url 'https://repo.opencollab.dev/main/' }
-    maven { url 'https://repo.papermc.io/repository/maven-public/' }
-    maven { url 'https://jitpack.io' }
 }
 
 dependencies {
     // Geyser API - Required for Forms API
     compileOnly 'org.geysermc.geyser:api:2.10.0-SNAPSHOT'
-    
-    // TownyElections API
-    compileOnly 'com.github.vingaming1113:TownyElections:1.2.0'
-    
-    // Paper API for Bukkit/Spigot compatibility
-    compileOnly 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
-    
-    // Towny API
-    compileOnly 'com.github.TownyAdvanced.Towny:towny:0.102.0.13'
 }
 
 shadowJar {
     archiveFileName = "TownyElections-geyser-${version}.jar"
-    
-    // Relocate Geyser API to avoid conflicts
-    relocate 'org.geysermc', 'com.townyelections.geyser.libs.geysermc'
-    
-    // Don't relocate our own classes
-    exclude 'com/townyelections/geyser/**'
     
     // Exclude unnecessary files
     exclude 'META-INF/*.SF'
