@@ -8,16 +8,12 @@ version '1.0.0'
 
 repositories {
     mavenCentral()
-    maven { url 'https://repo.opencollab.dev/main/' }
 }
 
-dependencies {
-    // Geyser API - needed for compilation
-    compileOnly 'org.geysermc.geyser:api:2.10.0-SNAPSHOT'
-    
-    // Bukkit API - needed for compilation
-    compileOnly 'org.bukkit:bukkit:1.21.4-R0.1-SNAPSHOT'
-}
+// NO dependencies - everything is loaded via reflection at runtime
+// Geyser provides its API on the extension classpath
+// Bukkit is provided by the server
+// TownyElections and Towny are loaded via reflection
 
 shadowJar {
     archiveFileName = "TownyElections-geyser-${version}.jar"
