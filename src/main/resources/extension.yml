@@ -1,0 +1,7 @@
+id: townyelections
+name: TownyElections
+main: com.townyelections.geyser.TownyElectionsExtension
+api: 2.9.0
+version: 1.0.0
+authors: [vingaming1113]
+dependencies: []

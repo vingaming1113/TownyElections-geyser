@@ -1,0 +1,53 @@
+plugins {
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group 'com.townyelections'
+version '1.0.0'
+
+repositories {
+    mavenCentral()
+    maven { url 'https://repo.geysermc.org/repository/public/' }
+    maven { url 'https://repo.papermc.io/repository/maven-public/' }
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    // Geyser API
+    compileOnly 'org.geysermc:api:2.9.0'
+    
+    // TownyElections API (we'll depend on the main plugin)
+    compileOnly 'com.github.vingaming1113:TownyElections:1.2.0'
+    
+    // Paper API for Bukkit/Spigot compatibility
+    compileOnly 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
+    
+    // Towny API
+    compileOnly 'com.github.TownyAdvanced.Towny:towny:0.102.0.13'
+}
+
+shadowJar {
+    archiveFileName = "TownyElections-geyser-${version}.jar"
+    
+    relocate 'org.geysermc', 'com.townyelections.geyser.libs.geysermc'
+    
+    // Don't relocate our own classes
+    exclude 'com/townyelections/geyser/**'
+    
+    // Exclude unnecessary files
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+tasks.withType(JavaCompile) {
+    sourceCompatibility = '21'
+    targetCompatibility = '21'
+}
