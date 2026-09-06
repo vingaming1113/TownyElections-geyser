@@ -8,12 +8,10 @@ version '1.0.0'
 
 repositories {
     mavenCentral()
-    maven { url 'https://repo.opencollab.dev/main/' }
 }
 
 dependencies {
-    // Geyser API - Required for Forms API
-    compileOnly 'org.geysermc.geyser:api:2.10.0-SNAPSHOT'
+    // No compile-time dependencies needed - Geyser provides its API at runtime
 }
 
 shadowJar {
